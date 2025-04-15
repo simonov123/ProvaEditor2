@@ -1,17 +1,33 @@
 import java.awt.Font;
 import java.awt.GraphicsEnvironment;
+import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.lang.reflect.Type;
+import javax.sound.sampled.AudioFileFormat;
+import javax.sound.sampled.AudioFormat;
+import javax.sound.sampled.AudioInputStream;
+import javax.sound.sampled.AudioSystem;
+import javax.sound.sampled.DataLine;
+import javax.sound.sampled.TargetDataLine;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.browser.Browser;
+import org.eclipse.swt.browser.BrowserFunction;
 import org.eclipse.swt.browser.ProgressAdapter;
 import org.eclipse.swt.browser.ProgressEvent;
 import org.eclipse.swt.custom.CCombo;
@@ -26,8 +42,11 @@ import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.*;
-
+import java.util.List;
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
+import com.google.gson.reflect.TypeToken;
 
 public class runtime {
 	private String currentfile;
@@ -40,7 +59,7 @@ public class runtime {
 	private ToolItem copy;
 	private ToolItem paste;
 	private ToolItem cut;
-	private ToolItem send;
+	private ToolItem recent;
 	private ToolItem rename;
 	private ToolItem delete;
 	private ToolItem credits;
@@ -54,6 +73,9 @@ public class runtime {
 	private Clipboard clip;
 	private org.eclipse.swt.graphics.Font defaultFont;
 	private ToolItem odtcnv;
+	private ArrayList<String> rece;
+	private org.eclipse.swt.widgets.List recelist;
+
 	
 	
 
@@ -74,13 +96,18 @@ public class runtime {
 			sh.setText(currentfile);
 			prov.init(new File(currentfile), currentfile);
 			try {
-				if (currentfile.endsWith(".odt")) {
+				if (currentfile.endsWith(".odt")||currentfile.endsWith(".docx")) {
 					Shell sh7=new Shell(disp);
 					sh7.setText(currentfile + " (sola lettura)");
 					sh7.setSize(900,600);
 					sh7.setLayout(new FillLayout());
 					Browser browser = new Browser(sh7, SWT.NONE);
-					File htmlFile = new File("ODT.html");
+					File htmlFile;
+					if(currentfile.endsWith(".odt")) {
+					htmlFile = new File("ODT.html");}
+					else {
+						htmlFile = new File("DOCX.html");
+					}
 					browser.setUrl(htmlFile.toURI().toString());
 					Path path = Paths.get(currentfile);
 					byte[] bytes = Files.readAllBytes(path);
@@ -88,45 +115,100 @@ public class runtime {
 					browser.addProgressListener(new ProgressAdapter() {
 					    @Override
 					    public void completed(ProgressEvent event) {
+					    	
 					        disp.timerExec(500, () -> { // ritardo per sicurezza
 					            String safeBase64 = base64.replaceAll("'", "\\\\'");
+					            if(currentfile.endsWith(".odt")) {
 					            String script = "window.loadODTFromBase64('" + safeBase64 + "');";
-					            browser.execute(script);
+					            browser.execute(script);}
+					            if(currentfile.endsWith(".docx")) {
+					            	 String script = "window.loadDOCXFromBase64('" + safeBase64 + "');";
+					            	 browser.execute(script);
+					            }
+					            
+					           
 					        });
 					    }
 					});
+					new BrowserFunction(browser, "sendTextToJava") {
+					    @Override
+					    public Object function(Object[] arguments) {
+					        if (arguments.length > 0) {
+					            String textFromJS = (String) arguments[0];
+					            System.out.println("Testo ricevuto da JavaScript:");
+					            System.out.println(textFromJS);
+					            editcamp.setText(textFromJS);
+					            sh7.close();
+					            // Qui puoi salvare, analizzare o usare il testo come vuoi
+
+					            // opzionalmente puoi restituire una risposta a JS
+					            return "Ricevuto in Java!";
+					        }
+					        return null;
+					    }
+					};
+
 
 					sh7.open();
 					while(sh7.isDisposed()!=true) {
 						disp.readAndDispatch();
 					}
 				}
+				else {
 				String content=prov.getcontent();
+				editcamp.setText(content);
 				if(new File("data.json").exists()==true) {
-				  Gson gson = new Gson();
-			        FileReader reader = new FileReader("data.json");
-			        fontdata data = gson.fromJson(reader, fontdata.class);
-			        reader.close();
-			        org.eclipse.swt.graphics.Font nuovoFont = new org.eclipse.swt.graphics.Font(disp, data.font, data.size, SWT.NORMAL);
-			        int fontindex=0;
-			        int sizeindex=0;
-			        for(int i=0;i<font.getItemCount();i++) {
-			        	if(data.font.equals(font.getItem(i))) {
-			        		fontindex=i;
-			        		break;
-			        	}
-			        }
-			        for(int j=0;j<size.getItemCount();j++) {
-			        	if(data.size==Integer.parseInt(size.getText())) {
-			        		sizeindex=j;
-			        		break;
-			        	}
-			        }
-			        System.out.println(fontindex+"  "+sizeindex);
-			        font.select(fontindex);
-			        size.select(sizeindex);
-			        editcamp.setFont(nuovoFont);}
-			        editcamp.setText(content);
+					try {
+				        Gson gson = new Gson();
+				        FileReader reader = new FileReader("data.json");
+				        Type listType = new TypeToken<List<fontdata>>() {}.getType();
+				        List<fontdata> dataList = gson.fromJson(reader, listType);
+				        reader.close();
+
+				        fontdata matched = null;
+
+				        for (fontdata data : dataList) {
+				            if (data.file.equals(currentfile)) {
+				                matched = data;
+				        
+				            }
+				        }
+
+				        if (matched != null) {
+				            org.eclipse.swt.graphics.Font nuovoFont = new org.eclipse.swt.graphics.Font(
+				                disp, matched.font, matched.size, SWT.NORMAL
+				            );
+
+				            int fontindex = 0;
+				            int sizeindex = 0;
+
+				            for (int i = 0; i < font.getItemCount(); i++) {
+				                if (matched.font.equals(font.getItem(i))) {
+				                    fontindex = i;
+				                    break;
+				                }
+				            }
+
+				            for (int j = 0; j < size.getItemCount(); j++) {
+				                if (matched.size == Integer.parseInt(size.getItem(j))) {
+				                    sizeindex = j;
+				                    break;
+				                }
+				            }
+
+				            font.select(fontindex);
+				            size.select(sizeindex);
+				            editcamp.setFont(nuovoFont);
+				            System.out.println("Font applicato: " + matched.font + " " + matched.size);
+				        } else {
+				            System.out.println("Nessun font associato trovato per: " + currentfile);
+				        }
+
+				    } catch (IOException e) {
+				        e.printStackTrace();
+				    }
+				}
+			        editcamp.setText(content);}
 			} catch (FileNotFoundException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
@@ -163,7 +245,6 @@ public class runtime {
 					
 				}
 
-				@Override
 				public void widgetSelected(SelectionEvent arg0) {
 					 DirectoryDialog chooser = new DirectoryDialog(sh2);
 				     chooser.setText("Seleziona una cartella");
@@ -217,29 +298,49 @@ public class runtime {
 			}
 		});
 		save.addListener(SWT.Selection, event->{
-			String content=editcamp.getText();
-			try {
-				if(currentfile!=null) {
-				prov.writecontent(content);
-				  FontData[] fd = editcamp.getFont().getFontData();
-				  System.out.println("FontData length: " + fd.length);
-				  System.out.println("Font name: " + fd[0].getName());
-				  System.out.println("Font size: " + fd[0].getHeight());
-		            String fontName = fd[0].getName();
-		            int fontSize = fd[0].getHeight();
-		            String fl=currentfile;
-		            fontdata data = new fontdata(fontName, fontSize, fl);
-		            Gson gson = new Gson();
-		            String jsonFilePath = "data.json";
-		            FileWriter jsonwriter = new FileWriter(jsonFilePath);
-		            gson.toJson(data, jsonwriter);
-		            System.out.println(gson.toJson(data));
-		            jsonwriter.close();
-		            }
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+			 String content = editcamp.getText();
+			    try {
+			        if (currentfile != null) {
+			            prov.writecontent(content);
+
+			            FontData[] fd = editcamp.getFont().getFontData();
+			            String fontName = fd[0].getName();
+			            int fontSize = fd[0].getHeight();
+			            String fl = currentfile;
+
+			            fontdata data = new fontdata(fontName, fontSize, fl);
+			            Gson gson = new Gson();
+			            String jsonFilePath = "data.json";
+
+			            List<fontdata> dataList = new ArrayList<>();
+			            File jsonFile = new File(jsonFilePath);
+
+			            if (jsonFile.exists()) {
+			                FileReader reader = new FileReader(jsonFile);
+			                JsonElement element = JsonParser.parseReader(reader);
+			                reader.close();
+
+			                Type listType = new TypeToken<List<fontdata>>() {}.getType();
+
+			                if (element.isJsonArray()) {
+			                    dataList = gson.fromJson(element, listType);
+			                } else if (element.isJsonObject()) {
+			                    fontdata single = gson.fromJson(element, fontdata.class);
+			                    dataList.add(single);
+			                }
+			            }
+
+			            dataList.add(data); // aggiungi nuovo font associato al file
+
+			            FileWriter writer = new FileWriter(jsonFilePath);
+			            gson.toJson(dataList, writer);
+			            writer.close();
+
+			            System.out.println("Salvato: " + gson.toJson(data));
+			        }
+			    } catch (IOException e) {
+			        e.printStackTrace();
+			    }
 		});
 		copy.addListener(SWT.Selection,event->{
 			editcamp.copy();
@@ -379,12 +480,50 @@ public class runtime {
 		        editcamp.setFont(newFont);
 		    }
 		});
+		recent.addListener(SWT.Selection, event -> {
+			Shell sh12=new Shell(disp);
+			ArrayList <String> filerecenti=new ArrayList <String>();
+			try {
+				filerecenti=this.fillList();
+				sh12.setLayout(new FillLayout());
+				sh12.setText("Recenti");
+				sh12.setSize(150,400);
+				recelist=new org.eclipse.swt.widgets.List(sh12,SWT.BORDER);
+				for(String filerecente : filerecenti) {
+					recelist.add(filerecente);
+				}
+				sh12.open();
+				while(!sh12.isDisposed()) {
+					disp.readAndDispatch();
+				}
+			} catch (IOException e1) {
+				// TODO Auto-generated catch block
+				e1.printStackTrace();
+			}
+			
+			
+		   });
+
 	    sh.open();
 		while(!sh.isDisposed()) {
 			disp.readAndDispatch();
 		}
 		
 		
+	}
+
+	private ArrayList<String> fillList() throws IOException {
+		// TODO Auto-generated method stub
+		   Gson gson = new Gson();
+	        FileReader reader = new FileReader("data.json");
+	        Type listType = new TypeToken<List<fontdata>>() {}.getType();
+	        List<fontdata> dataList = gson.fromJson(reader, listType);
+	        reader.close();
+            rece=new ArrayList<String>();
+	        for (fontdata data : dataList) {
+	            rece.add(data.file);
+	        }
+		return rece;
 	}
 
 	private void interfaceinit() {
@@ -421,8 +560,8 @@ public class runtime {
 	        cut.setText("Taglia");
 	        ToolItem separator3 = new ToolItem(actionbar, SWT.SEPARATOR);
 	        separator3.setWidth(10);
-	        send = new ToolItem(actionbar, SWT.PUSH);
-	        send.setText("Invia");
+	        recent = new ToolItem(actionbar, SWT.PUSH);
+	        recent.setText("File Recenti");
 	        ToolItem separator4 = new ToolItem(actionbar, SWT.SEPARATOR);
 	        separator4.setWidth(10);
 	        rename = new ToolItem(actionbar, SWT.PUSH);
@@ -467,10 +606,13 @@ public class runtime {
 
 	        sizeItem.setWidth(80);
 	        sizeItem.setControl(size);
+	        ToolItem separator11 = new ToolItem(actionbar2, SWT.SEPARATOR);
+	        separator11.setWidth(10);
 	        stamp = new ToolItem(actionbar2, SWT.PUSH|SWT.BORDER);
 		     Image printico=new Image(disp,"icons/print.png");
 		       stamp.setImage(printico);
 		     
+			      
 		     
 	        clip=new Clipboard(disp);
 		if(currentfile!=null) {
@@ -479,5 +621,9 @@ public class runtime {
 		sh.setSize(900,600);
 		
 	}
+	
+	 
+	  
+	    
 
 }

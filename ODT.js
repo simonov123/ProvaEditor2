@@ -28,3 +28,9 @@ window.loadODTFromBase64 = async function(base64String) {
         document.getElementById("output").textContent = "Errore nella lettura del file ODT.";
     }
 };
+function sendata(){
+	var text=document.getElementById('output').textContent;
+	  const result = window.sendTextToJava(text);
+	   console.log("Risposta da Java:", result);
+	
+}
