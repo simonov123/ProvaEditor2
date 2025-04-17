@@ -391,7 +391,91 @@ public class runtime {
 
 			            System.out.println(bundle.getString("msg.savedFont")  + gson.toJson(data));
 			        }
-			        }} catch (IOException e) {
+			        }
+			        if(currentfile==null) {
+
+						Shell sh2=new Shell(disp);
+						sh2.setText(bundle.getString("title.newFileDialog"));
+						sh2.setSize(450,120);
+						GridLayout lay2=new GridLayout();
+						lay2.numColumns=2;
+						sh2.setLayout(lay2);
+						Label name_=new Label(sh2,SWT.NONE);
+						Text namecamp=new Text(sh2,SWT.BORDER|SWT.LEFT_TO_RIGHT);
+						Label path_=new Label(sh2,SWT.NONE);
+						Text namepath=new Text(sh2,SWT.BORDER|SWT.LEFT_TO_RIGHT);
+						name_.setText(bundle.getString("label.filename"));
+						namecamp.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, true));
+						path_.setText(bundle.getString("label.pathname"));
+						namepath.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, true));
+						Button pathchooser=new Button(sh2,SWT.BORDER);
+						pathchooser.setText(bundle.getString("button.chooseFolder"));
+						Button confnew=new Button(sh2,SWT.BORDER);
+						confnew.setText(bundle.getString("button.ok"));
+						pathchooser.addSelectionListener(new SelectionListener() {
+
+							@Override
+							public void widgetDefaultSelected(SelectionEvent arg0) {
+								
+								
+							}
+
+							public void widgetSelected(SelectionEvent arg0) {
+								 DirectoryDialog chooser = new DirectoryDialog(sh2);
+							     chooser.setText(bundle.getString("button.chooseFolder"));
+								String path=chooser.open();
+								namepath.setText(path);
+								
+							}
+							
+						});
+						confnew.addSelectionListener(new SelectionListener() {
+
+							@Override
+							public void widgetDefaultSelected(SelectionEvent arg0) {
+							
+								
+							}
+
+							@Override
+							public void widgetSelected(SelectionEvent arg0) {
+								if(currentfile!=null) {
+								String content=editcamp.getText();
+								try {
+									prov.writecontent(content);
+									editcamp.setText("");
+								} catch (IOException e) {
+									// TODO Auto-generated catch block
+									e.printStackTrace();
+								}}
+								String namef=namecamp.getText();
+								String pathf=namepath.getText();
+								currentfile=pathf+"/"+namef+".txt";
+								System.out.println(currentfile);
+								sh.setText(currentfile);
+								prov.init(new File(currentfile), currentfile);
+								try {
+									prov.makefile();
+									prov.writecontent(content);
+									sh2.close();
+								} catch (IOException e) {
+									// TODO Auto-generated catch block
+									e.printStackTrace();
+								}
+								
+								
+								
+							}
+							
+						});
+						sh2.open();
+						while(sh2.isDisposed()) {
+							disp.readAndDispatch();
+						}
+					
+			        	
+			        }
+			    } catch (IOException e) {
 			        e.printStackTrace();
 			    }
 		});
