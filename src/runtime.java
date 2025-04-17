@@ -667,6 +667,7 @@ public class runtime {
 		// NO DOCX O ODT
 		else {
 			System.out.println(bundle.getString("msg.commonFile"));
+			sh.setText(currentfile);
 		String content=prov.getcontent();
 		editcamp.setText(content);
 		//INIZIO SETTING FONT
