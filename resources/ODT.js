@@ -1,4 +1,4 @@
-<pre id="output"></pre>
+console.log("ODT.js caricato correttamente");
 window.loadODTFromBase64 = async function(base64String) {
     try {
         const binary = atob(base64String);
@@ -21,6 +21,7 @@ window.loadODTFromBase64 = async function(base64String) {
         }
 
         document.getElementById("output").textContent = output;
+        document.getElementById("content").textContent = output;
 
     } catch (err) {
         console.error("Errore nel parsing ODT:", err);

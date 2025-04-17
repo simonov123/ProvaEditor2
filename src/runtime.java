@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.LinkedHashSet;
 import java.lang.reflect.Type;
 import javax.sound.sampled.AudioFileFormat;
 import javax.sound.sampled.AudioFormat;
@@ -25,6 +26,9 @@ import javax.sound.sampled.AudioSystem;
 import javax.sound.sampled.DataLine;
 import javax.sound.sampled.TargetDataLine;
 
+import org.apache.poi.extractor.POITextExtractor;
+import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
+import org.apache.poi.xwpf.usermodel.XWPFDocument;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.browser.Browser;
 import org.eclipse.swt.browser.BrowserFunction;
@@ -42,7 +46,13 @@ import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
 import org.eclipse.swt.widgets.*;
+import org.json.JSONObject;
+
 import java.util.List;
+import java.util.Locale;
+import java.util.ResourceBundle;
+import java.util.Set;
+
 import com.google.gson.Gson;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
@@ -79,16 +89,29 @@ public class runtime {
 	
 	
 
-	public void run(String cur) {
-		System.out.println("runtime");
+	public void run(String cur) throws IOException {
+		ResourceBundle bundle=ResourceBundle.getBundle("messages", Locale.getDefault());
+		System.out.println(bundle.getString("msg.runtimeAvviato"));
+		prov=new provider();
+		this.interfaceinit();
 		if(cur!=null) {
 		currentfile=cur;
-		prov.init(new File(currentfile), currentfile);}
-		this.interfaceinit();
-		prov=new provider();
+		prov.init(new File(currentfile), currentfile);
+		Display.getDefault().timerExec(1000, new Runnable() {
+		    @Override
+		    public void run() {
+		        // Questo codice verrà eseguito DOPO 5 secondi
+		        System.out.println("5 secondi passati!");
+
+		        if (editcamp != null) {
+		            System.out.println("Ecco il testo dopo l'attesa!");
+		        }
+		    }
+		});
+		this.openfromIntent(currentfile);}
 		open.addListener(SWT.Selection, event->{
 			 FileDialog fileDialog = new FileDialog(sh, SWT.OPEN);
-		        fileDialog.setText("Seleziona un file");
+		        fileDialog.setText(bundle.getString("title.openFileDialog"));
 			currentfile=fileDialog.open();
 			if(currentfile==null) {
 				currentfile="";
@@ -97,66 +120,73 @@ public class runtime {
 			prov.init(new File(currentfile), currentfile);
 			try {
 				if (currentfile.endsWith(".odt")||currentfile.endsWith(".docx")) {
-					Shell sh7=new Shell(disp);
-					sh7.setText(currentfile + " (sola lettura)");
-					sh7.setSize(900,600);
-					sh7.setLayout(new FillLayout());
-					Browser browser = new Browser(sh7, SWT.NONE);
-					File htmlFile;
 					if(currentfile.endsWith(".odt")) {
-					htmlFile = new File("ODT.html");}
-					else {
-						htmlFile = new File("DOCX.html");
-					}
+						Shell sh7=new Shell(disp);
+						sh7.setText(currentfile + bundle.getString("readonly.readonly"));
+						sh7.setSize(900,600);
+						sh7.setLayout(new FillLayout());
+						Browser browser = new Browser(sh7, SWT.NONE);
+						File htmlFile;
+					htmlFile = new File("ODT.html");
 					browser.setUrl(htmlFile.toURI().toString());
 					Path path = Paths.get(currentfile);
 					byte[] bytes = Files.readAllBytes(path);
 					String base64 = Base64.getEncoder().encodeToString(bytes);
-					browser.addProgressListener(new ProgressAdapter() {
-					    @Override
-					    public void completed(ProgressEvent event) {
-					    	
-					        disp.timerExec(500, () -> { // ritardo per sicurezza
-					            String safeBase64 = base64.replaceAll("'", "\\\\'");
-					            if(currentfile.endsWith(".odt")) {
-					            String script = "window.loadODTFromBase64('" + safeBase64 + "');";
-					            browser.execute(script);}
-					            if(currentfile.endsWith(".docx")) {
-					            	 String script = "window.loadDOCXFromBase64('" + safeBase64 + "');";
-					            	 browser.execute(script);
-					            }
-					            
-					           
-					        });
-					    }
-					});
 					new BrowserFunction(browser, "sendTextToJava") {
 					    @Override
 					    public Object function(Object[] arguments) {
 					        if (arguments.length > 0) {
 					            String textFromJS = (String) arguments[0];
-					            System.out.println("Testo ricevuto da JavaScript:");
+					            System.out.println(bundle.getString("msg.recievedFromJS"));
 					            System.out.println(textFromJS);
 					            editcamp.setText(textFromJS);
 					            sh7.close();
 					            // Qui puoi salvare, analizzare o usare il testo come vuoi
 
 					            // opzionalmente puoi restituire una risposta a JS
-					            return "Ricevuto in Java!";
+					            return bundle.getString("msg.recievedInJava");
 					        }
 					        return null;
 					    }
 					};
-
-
+					browser.addProgressListener(new ProgressAdapter() {
+					    @Override
+					    public void completed(ProgressEvent event) {
+					    	
+					        disp.timerExec(500, () -> { 
+					String safeBase64 = jsEscape(base64);
+					 String script = "window.loadODTFromBase64('" + safeBase64 + "');";
+			            browser.execute(script);});
+					    }});
 					sh7.open();
 					while(sh7.isDisposed()!=true) {
-						disp.readAndDispatch();
-					}
-				}
+						disp.readAndDispatch();}}
+					
+			
+					if(currentfile.endsWith(".docx")) {
+		            	try {
+							FileInputStream fis = new FileInputStream(currentfile);
+							POITextExtractor extractor;
+			            	XWPFDocument doc = new XWPFDocument(fis);
+			                extractor = new XWPFWordExtractor(doc);
+			                String extractedText = extractor.getText();
+			                editcamp.setText(extractedText);
+						} catch (FileNotFoundException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						} catch (IOException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}
+		            	
+		            	
+				 }}
+				//FINE DOCX O ODT
+				// NO DOCX O ODT
 				else {
 				String content=prov.getcontent();
 				editcamp.setText(content);
+				//INIZIO SETTING FONT
 				if(new File("data.json").exists()==true) {
 					try {
 				        Gson gson = new Gson();
@@ -199,28 +229,32 @@ public class runtime {
 				            font.select(fontindex);
 				            size.select(sizeindex);
 				            editcamp.setFont(nuovoFont);
-				            System.out.println("Font applicato: " + matched.font + " " + matched.size);
+				         
+				            System.out.println(bundle.getString("msg.fontApplied") + matched.font + " " + matched.size);
 				        } else {
-				            System.out.println("Nessun font associato trovato per: " + currentfile);
+				            System.out.println(bundle.getString("msg.noFontForFile") + currentfile);
+				            editcamp.setFont(defaultFont);
+				            font.select(1);
+				            size.select(3);
 				        }
-
-				    } catch (IOException e) {
-				        e.printStackTrace();
-				    }
-				}
-			        editcamp.setText(content);}
-			} catch (FileNotFoundException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}
+				      
+					}finally {}
+					//FINE SETTING FONT
+					}}
 			
-		});
+			}
+			//CATCH
+			  catch (FileNotFoundException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+			});
 		new_.addListener(SWT.Selection, event->{
 			Shell sh2=new Shell(disp);
-			sh2.setText("inserire nome");
+			sh2.setText(bundle.getString("title.newFileDialog"));
 			sh2.setSize(450,120);
 			GridLayout lay2=new GridLayout();
 			lay2.numColumns=2;
@@ -229,14 +263,14 @@ public class runtime {
 			Text namecamp=new Text(sh2,SWT.BORDER|SWT.LEFT_TO_RIGHT);
 			Label path_=new Label(sh2,SWT.NONE);
 			Text namepath=new Text(sh2,SWT.BORDER|SWT.LEFT_TO_RIGHT);
-			name_.setText("filename");
+			name_.setText(bundle.getString("label.filename"));
 			namecamp.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, true));
-			path_.setText("pathname");
+			path_.setText(bundle.getString("label.pathname"));
 			namepath.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, true));
 			Button pathchooser=new Button(sh2,SWT.BORDER);
-			pathchooser.setText("scegli cartella...");
+			pathchooser.setText(bundle.getString("button.chooseFolder"));
 			Button confnew=new Button(sh2,SWT.BORDER);
-			confnew.setText("OK");
+			confnew.setText(bundle.getString("button.ok"));
 			pathchooser.addSelectionListener(new SelectionListener() {
 
 				@Override
@@ -247,7 +281,7 @@ public class runtime {
 
 				public void widgetSelected(SelectionEvent arg0) {
 					 DirectoryDialog chooser = new DirectoryDialog(sh2);
-				     chooser.setText("Seleziona una cartella");
+				     chooser.setText(bundle.getString("button.chooseFolder"));
 					String path=chooser.open();
 					namepath.setText(path);
 					
@@ -268,6 +302,7 @@ public class runtime {
 					String content=editcamp.getText();
 					try {
 						prov.writecontent(content);
+						editcamp.setText("");
 					} catch (IOException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
@@ -281,7 +316,6 @@ public class runtime {
 					try {
 						prov.makefile();
 						sh2.close();
-						editcamp.setText("");
 					} catch (IOException e) {
 						// TODO Auto-generated catch block
 						e.printStackTrace();
@@ -301,6 +335,25 @@ public class runtime {
 			 String content = editcamp.getText();
 			    try {
 			        if (currentfile != null) {
+			        	if(currentfile.endsWith(".odt")||currentfile.endsWith("docx")) {
+			        		MessageBox messageBox = new MessageBox(sh, SWT.ICON_QUESTION | SWT.YES | SWT.NO);
+			        		messageBox.setText(bundle.getString("msg.createNewFile"));
+			        		messageBox.setMessage(bundle.getString("msg.readOnlyNotice"));
+			        		int response = messageBox.open();
+
+			        		if (response == SWT.YES) {
+			        			String newFileName = new File(currentfile).getName();
+			        			prov.rename(this.changeExtension(newFileName, "txt"));
+			        			prov.writecontent(content);
+								currentfile=prov.file.getPath();
+								sh.setText(currentfile);
+								
+			        		} else if (response == SWT.NO) {
+			        		    System.out.println("Hai cliccato No");
+			        		}
+
+			        	}
+			        	if(!currentfile.endsWith(".odt")&&!currentfile.endsWith(".docx")) {
 			            prov.writecontent(content);
 
 			            FontData[] fd = editcamp.getFont().getFontData();
@@ -336,9 +389,9 @@ public class runtime {
 			            gson.toJson(dataList, writer);
 			            writer.close();
 
-			            System.out.println("Salvato: " + gson.toJson(data));
+			            System.out.println(bundle.getString("msg.savedFont")  + gson.toJson(data));
 			        }
-			    } catch (IOException e) {
+			        }} catch (IOException e) {
 			        e.printStackTrace();
 			    }
 		});
@@ -354,7 +407,7 @@ public class runtime {
 		rename.addListener(SWT.Selection,event->{
 			Shell sh3=new Shell(disp);
 			sh3.setSize(300,40);
-			sh3.setText("rinomina");
+			sh3.setText(bundle.getString("title.renameDialog"));
 			GridLayout lay3=new GridLayout();
 			lay3.numColumns=3;
 			sh3.setLayout(lay3);
@@ -363,7 +416,7 @@ public class runtime {
 			Text newn=new Text(sh3,SWT.BORDER);
 			newn.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, true));
 			Button ok2=new Button(sh3,SWT.BORDER);
-			ok2.setText("OK");
+			ok2.setText(bundle.getString("button.ok"));
 			ok2.addSelectionListener(new SelectionListener() {
 
 				@Override
@@ -391,12 +444,12 @@ public class runtime {
 		delete.addListener(SWT.Selection,event->{
 			prov.delete();
 			currentfile=null;
-			sh.setText("editor");
+			sh.setText(bundle.getString("title.editor"));
 			editcamp.setText("");
 		});
 		credits.addListener(SWT.Selection, event->{
 			Shell sh4=new Shell(disp);
-			sh4.setText("credits");
+			sh4.setText(bundle.getString("title.creditsDialog"));
 		    sh4.setSize(300,100);
 		    GridLayout lay4=new GridLayout();
 		    lay4.numColumns=1;
@@ -404,7 +457,7 @@ public class runtime {
 		    Label credits=new Label(sh4,SWT.NONE);
 		    Button ok3=new Button(sh4,SWT.BORDER);
 		    credits.setText("Красота спасет мир\n lucianosimone143@gmail.com");
-		    ok3.setText("ok");
+		    ok3.setText(bundle.getString("button.ok"));
 		    ok3.addSelectionListener(new SelectionListener() {
 
 				@Override
@@ -442,7 +495,7 @@ public class runtime {
 		stamp.addListener(SWT.Selection, event->{
 			if(currentfile!=null) {
 				Shell sh6=new Shell(disp);
-				sh6.setText("anteprima stampa");
+				sh6.setText(bundle.getString("title.printPreview"));
 				sh6.setSize(900,600);
 				sh6.setLayout(new FillLayout());
 				Browser browser=new Browser(sh6,SWT.NONE);
@@ -486,12 +539,42 @@ public class runtime {
 			try {
 				filerecenti=this.fillList();
 				sh12.setLayout(new FillLayout());
-				sh12.setText("Recenti");
-				sh12.setSize(150,400);
+				sh12.setText(bundle.getString("title.recentFiles"));
+				sh12.setSize(650,500);
 				recelist=new org.eclipse.swt.widgets.List(sh12,SWT.BORDER);
 				for(String filerecente : filerecenti) {
 					recelist.add(filerecente);
 				}
+				recelist.addSelectionListener(new SelectionListener() {
+
+					@Override
+					public void widgetDefaultSelected(SelectionEvent arg0) {
+						// TODO Auto-generated method stub
+						
+					}
+
+					@Override
+					public void widgetSelected(SelectionEvent arg0) {
+						 int index = recelist.getSelectionIndex(); // ottieni l'indice
+					        if (index >= 0) {
+					            String selectedItem = recelist.getItem(index); // ottieni il valore testuale
+					            System.out.println(bundle.getString("msg.fileSelected") + selectedItem);
+					            try {
+					            	ProcessBuilder pb = new ProcessBuilder(
+					            		    "java", "-jar", "ProvaEditor2.jar", selectedItem
+					            		);
+
+					                pb.inheritIO(); // eredita l'input/output della console (utile per vedere cosa stampa)
+					                Process process = pb.start();
+
+					            } catch (IOException e) {
+					                e.printStackTrace();
+					            }
+					        }
+						
+					}
+					
+				});
 				sh12.open();
 				while(!sh12.isDisposed()) {
 					disp.readAndDispatch();
@@ -512,6 +595,140 @@ public class runtime {
 		
 	}
 
+	private void openfromIntent(String currentfile2) throws IOException {
+		ResourceBundle bundle=ResourceBundle.getBundle("messages", Locale.getDefault());
+		
+
+		if (currentfile.endsWith(".odt")||currentfile.endsWith(".docx")) {
+			if(currentfile.endsWith(".odt")) {
+				System.out.println(bundle.getString("msg.odtFile"));
+				Shell sh7=new Shell(disp);
+				sh7.setText(currentfile + bundle.getString("readonly.readonly"));
+				sh7.setSize(900,600);
+				sh7.setLayout(new FillLayout());
+				Browser browser = new Browser(sh7, SWT.NONE);
+				File htmlFile;
+			htmlFile = new File("ODT.html");
+			browser.setUrl(htmlFile.toURI().toString());
+			Path path = Paths.get(currentfile);
+			byte[] bytes = Files.readAllBytes(path);
+			String base64 = Base64.getEncoder().encodeToString(bytes);
+			new BrowserFunction(browser, "sendTextToJava") {
+			    @Override
+			    public Object function(Object[] arguments) {
+			        if (arguments.length > 0) {
+			            String textFromJS = (String) arguments[0];
+			            System.out.println(bundle.getString("recievedFromJS"));
+			            System.out.println(textFromJS);
+			            editcamp.setText(textFromJS);
+			            sh7.close();
+			            // Qui puoi salvare, analizzare o usare il testo come vuoi
+
+			            // opzionalmente puoi restituire una risposta a JS
+			            return bundle.getString("msg.recievedInJava");
+			        }
+			        return null;
+			    }
+			};
+			browser.addProgressListener(new ProgressAdapter() {
+			    @Override
+			    public void completed(ProgressEvent event) {
+			    	
+			        disp.timerExec(500, () -> { 
+			String safeBase64 = jsEscape(base64);
+			 String script = "window.loadODTFromBase64('" + safeBase64 + "');";
+	            browser.execute(script);});
+			    }});
+			sh7.open();
+			while(sh7.isDisposed()!=true) {
+				disp.readAndDispatch();}}
+			
+	
+			if(currentfile.endsWith(".docx")) {
+				System.out.println(bundle.getString("msg.docxFile"));
+            	try {
+					FileInputStream fis = new FileInputStream(currentfile);
+					POITextExtractor extractor;
+	            	XWPFDocument doc = new XWPFDocument(fis);
+	                extractor = new XWPFWordExtractor(doc);
+	                String extractedText = extractor.getText();
+	                editcamp.setText(extractedText);
+				} catch (FileNotFoundException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+            	
+            	
+		 }}
+		//FINE DOCX O ODT
+		// NO DOCX O ODT
+		else {
+			System.out.println(bundle.getString("msg.commonFile"));
+		String content=prov.getcontent();
+		editcamp.setText(content);
+		//INIZIO SETTING FONT
+		if(new File("data.json").exists()==true) {
+			try {
+		        Gson gson = new Gson();
+		        FileReader reader = new FileReader("data.json");
+		        Type listType = new TypeToken<List<fontdata>>() {}.getType();
+		        List<fontdata> dataList = gson.fromJson(reader, listType);
+		        reader.close();
+
+		        fontdata matched = null;
+
+		        for (fontdata data : dataList) {
+		            if (data.file.equals(currentfile)) {
+		                matched = data;
+		        
+		            }
+		        }
+
+		        if (matched != null) {
+		            org.eclipse.swt.graphics.Font nuovoFont = new org.eclipse.swt.graphics.Font(
+		                disp, matched.font, matched.size, SWT.NORMAL
+		            );
+
+		            int fontindex = 0;
+		            int sizeindex = 0;
+
+		            for (int i = 0; i < font.getItemCount(); i++) {
+		                if (matched.font.equals(font.getItem(i))) {
+		                    fontindex = i;
+		                    break;
+		                }
+		            }
+
+		            for (int j = 0; j < size.getItemCount(); j++) {
+		                if (matched.size == Integer.parseInt(size.getItem(j))) {
+		                    sizeindex = j;
+		                    break;
+		                }
+		            }
+
+		            font.select(fontindex);
+		            size.select(sizeindex);
+		            editcamp.setFont(nuovoFont);
+		         
+		            System.out.println(bundle.getString("msg.AppliedFont") + matched.font + " " + matched.size);
+		        } else {
+		            System.out.println(bundle.getString("msg.noFontForFile") + currentfile);
+		            editcamp.setFont(defaultFont);
+		            font.select(1);
+		            size.select(3);
+		        }
+		      
+			}finally {}
+			//FINE SETTING FONT
+			}}
+	
+	
+		
+	}
+
 	private ArrayList<String> fillList() throws IOException {
 		// TODO Auto-generated method stub
 		   Gson gson = new Gson();
@@ -521,21 +738,29 @@ public class runtime {
 	        reader.close();
             rece=new ArrayList<String>();
 	        for (fontdata data : dataList) {
-	            rece.add(data.file);
+	        	if(new File(data.file).exists()==true) {
+	            rece.add(data.file);}
+	        }
+	        rece = new ArrayList<>(new LinkedHashSet<>(rece));
+
+	        if(rece.size()>100) {
+	        	int newstart=rece.size()-100;
+	        	 rece = new ArrayList<>(rece.subList(newstart, rece.size()));
 	        }
 		return rece;
 	}
 
 	private void interfaceinit() {
+		ResourceBundle bundle=ResourceBundle.getBundle("messages", Locale.getDefault());
 		disp=new Display();
 		defaultFont = new org.eclipse.swt.graphics.Font(disp, "Arial", 14, SWT.NORMAL);
 		sh=new Shell(disp);
-		sh.setText("editor");
+		sh.setText(bundle.getString("title.editor"));
 		GridLayout lay=new GridLayout();
 		lay.numColumns=1;
 		sh.setLayout(lay);
 		editcamp=new Text(sh,SWT.LEFT_TO_RIGHT|SWT.MULTI|SWT.BORDER|SWT.V_SCROLL);
-		editcamp.setSize(900, 500);
+		editcamp.setSize(1200, 500);
 		 GridData textLayoutData = new GridData(SWT.FILL, SWT.FILL, true, true);
 		 textLayoutData.heightHint = 500;
 		 editcamp.setLayoutData(textLayoutData);
@@ -545,47 +770,47 @@ public class runtime {
 		actionbar2=new ToolBar(sh,SWT.BORDER|SWT.FLAT|SWT.WRAP);
 		actionbar2.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
 		  save = new ToolItem(actionbar, SWT.PUSH|SWT.BORDER);
-	        save.setText("Salva");
+	        save.setText(bundle.getString("button.save"));
 	        ToolItem separator1 = new ToolItem(actionbar, SWT.SEPARATOR);
 	        separator1.setWidth(10);
 	        copy = new ToolItem(actionbar, SWT.PUSH);
-	        copy.setText("Copia");
+	        copy.setText(bundle.getString("button.copy"));
 	        ToolItem separator2 = new ToolItem(actionbar, SWT.SEPARATOR);
 	        separator2.setWidth(10);
 	        paste = new ToolItem(actionbar, SWT.PUSH);
-	        paste.setText("Incolla");
+	        paste.setText(bundle.getString("button.paste"));
 	        ToolItem separator4_ = new ToolItem(actionbar, SWT.SEPARATOR);
 	        separator4_.setWidth(10);
 	        cut = new ToolItem(actionbar, SWT.PUSH);
-	        cut.setText("Taglia");
+	        cut.setText(bundle.getString("button.cut"));
 	        ToolItem separator3 = new ToolItem(actionbar, SWT.SEPARATOR);
 	        separator3.setWidth(10);
 	        recent = new ToolItem(actionbar, SWT.PUSH);
-	        recent.setText("File Recenti");
+	        recent.setText(bundle.getString("button.recentFiles"));
 	        ToolItem separator4 = new ToolItem(actionbar, SWT.SEPARATOR);
 	        separator4.setWidth(10);
 	        rename = new ToolItem(actionbar, SWT.PUSH);
-	        rename.setText("Rinomina");
+	        rename.setText(bundle.getString("button.rename"));
 	        ToolItem separator5 = new ToolItem(actionbar, SWT.SEPARATOR);
 	        separator5.setWidth(10);
 	        delete = new ToolItem(actionbar, SWT.PUSH);
-	        delete.setText("Elimina");
+	        delete.setText(bundle.getString("button.delete"));
 	        ToolItem separator6 = new ToolItem(actionbar, SWT.SEPARATOR);
 	        separator6.setWidth(10);
 	        credits = new ToolItem(actionbar, SWT.PUSH);
-	        credits.setText("Crediti");
+	        credits.setText(bundle.getString("button.credits"));
 	        ToolItem separator7 = new ToolItem(actionbar, SWT.SEPARATOR);
 	        separator7.setWidth(10);
 	        new_ = new ToolItem(actionbar, SWT.PUSH);
-	        new_.setText("Nuovo File");
+	        new_.setText(bundle.getString("button.newFile"));
 	        ToolItem separator8 = new ToolItem(actionbar, SWT.SEPARATOR);
 	        separator8.setWidth(10);
 	        open = new ToolItem(actionbar, SWT.PUSH);
-	        open.setText("Apri File");
+	        open.setText(bundle.getString("button.openFile"));
 	        ToolItem separator9 = new ToolItem(actionbar, SWT.SEPARATOR);
 	        separator9.setWidth(10);
 	        html = new ToolItem(actionbar, SWT.PUSH);
-	        html.setText("Aprire nel Browser");
+	        html.setText(bundle.getString("button.openInBrowser"));
 	        ToolItem fontItem = new ToolItem(actionbar2, SWT.SEPARATOR);
 	        font = new CCombo(actionbar2, SWT.DROP_DOWN | SWT.READ_ONLY);
 	        GraphicsEnvironment ge=GraphicsEnvironment.getLocalGraphicsEnvironment();
@@ -618,9 +843,21 @@ public class runtime {
 		if(currentfile!=null) {
 			sh.setText(currentfile);
 		}
-		sh.setSize(900,600);
+		sh.setSize(1200,600);
 		
 	}
+	private String jsEscape(String str) {
+	    return str.replace("\\", "\\\\").replace("'", "\\'");
+	}
+	public String changeExtension(String filename, String newExtension) {
+	    int dotIndex = filename.lastIndexOf('.');
+	    if (dotIndex > 0) {
+	        filename = filename.substring(0, dotIndex);
+	    }
+	    return filename + "." + newExtension;
+	}
+
+
 	
 	 
 	  
