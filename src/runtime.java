@@ -469,6 +469,7 @@ public class runtime {
 			editcamp.cut();
 		});
 		rename.addListener(SWT.Selection,event->{
+			if(currentfile!=null) {
 			Shell sh3=new Shell(disp);
 			sh3.setSize(300,40);
 			sh3.setText(bundle.getString("title.renameDialog"));
@@ -504,7 +505,7 @@ public class runtime {
 			while(sh3.isDisposed()!=true) {
 				disp.readAndDispatch();
 			}
-		});
+			}});
 		delete.addListener(SWT.Selection,event->{
 			prov.delete();
 			currentfile=null;
