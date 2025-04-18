@@ -29,6 +29,7 @@ import javax.sound.sampled.TargetDataLine;
 import org.apache.poi.extractor.POITextExtractor;
 import org.apache.poi.xwpf.extractor.XWPFWordExtractor;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
+import org.apache.tika.Tika;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.browser.Browser;
 import org.eclipse.swt.browser.BrowserFunction;
@@ -58,6 +59,10 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonParser;
 import com.google.gson.reflect.TypeToken;
 
+
+
+
+
 public class runtime {
 	private String currentfile;
 	private Display disp;
@@ -85,11 +90,15 @@ public class runtime {
 	private ToolItem odtcnv;
 	private ArrayList<String> rece;
 	private org.eclipse.swt.widgets.List recelist;
+	private int openflag;
+
+	
 
 	
 	
 
 	public void run(String cur) throws IOException {
+		openflag=1;
 		ResourceBundle bundle=ResourceBundle.getBundle("messages", Locale.getDefault());
 		System.out.println(bundle.getString("msg.runtimeAvviato"));
 		prov=new provider();
@@ -120,47 +129,15 @@ public class runtime {
 			prov.init(new File(currentfile), currentfile);
 			try {
 				if (currentfile.endsWith(".odt")||currentfile.endsWith(".docx")) {
-					if(currentfile.endsWith(".odt")) {
-						Shell sh7=new Shell(disp);
-						sh7.setText(currentfile + bundle.getString("readonly.readonly"));
-						sh7.setSize(900,600);
-						sh7.setLayout(new FillLayout());
-						Browser browser = new Browser(sh7, SWT.NONE);
-						File htmlFile;
-					htmlFile = new File("ODT.html");
-					browser.setUrl(htmlFile.toURI().toString());
-					Path path = Paths.get(currentfile);
-					byte[] bytes = Files.readAllBytes(path);
-					String base64 = Base64.getEncoder().encodeToString(bytes);
-					new BrowserFunction(browser, "sendTextToJava") {
-					    @Override
-					    public Object function(Object[] arguments) {
-					        if (arguments.length > 0) {
-					            String textFromJS = (String) arguments[0];
-					            System.out.println(bundle.getString("msg.recievedFromJS"));
-					            System.out.println(textFromJS);
-					            editcamp.setText(textFromJS);
-					            sh7.close();
-					            // Qui puoi salvare, analizzare o usare il testo come vuoi
-
-					            // opzionalmente puoi restituire una risposta a JS
-					            return bundle.getString("msg.recievedInJava");
-					        }
-					        return null;
-					    }
-					};
-					browser.addProgressListener(new ProgressAdapter() {
-					    @Override
-					    public void completed(ProgressEvent event) {
-					    	
-					        disp.timerExec(500, () -> { 
-					String safeBase64 = jsEscape(base64);
-					 String script = "window.loadODTFromBase64('" + safeBase64 + "');";
-			            browser.execute(script);});
-					    }});
-					sh7.open();
-					while(sh7.isDisposed()!=true) {
-						disp.readAndDispatch();}}
+					if(currentfile.endsWith(".odt")) {try {
+					    File file = new File(currentfile);
+					    Tika tika = new Tika();
+					    String extractedText = tika.parseToString(file);
+					    editcamp.setText(extractedText);
+					    sh.setText(currentfile);
+					} catch (Exception e) {
+					    e.printStackTrace();
+					}}
 					
 			
 					if(currentfile.endsWith(".docx")) {
@@ -171,6 +148,7 @@ public class runtime {
 			                extractor = new XWPFWordExtractor(doc);
 			                String extractedText = extractor.getText();
 			                editcamp.setText(extractedText);
+			                sh.setText(currentfile);
 						} catch (FileNotFoundException e) {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
@@ -178,7 +156,8 @@ public class runtime {
 							// TODO Auto-generated catch block
 							e.printStackTrace();
 						}
-		            	
+		            
+
 		            	
 				 }}
 				//FINE DOCX O ODT
@@ -186,11 +165,12 @@ public class runtime {
 				else {
 				String content=prov.getcontent();
 				editcamp.setText(content);
+				sh.setText(currentfile);
 				//INIZIO SETTING FONT
-				if(new File("data.json").exists()==true) {
+				if(new File(System.getProperty("user.home")+"/data.json").exists()==true) {
 					try {
 				        Gson gson = new Gson();
-				        FileReader reader = new FileReader("data.json");
+				        FileReader reader = new FileReader(System.getProperty("user.home")+"/data.json");
 				        Type listType = new TypeToken<List<fontdata>>() {}.getType();
 				        List<fontdata> dataList = gson.fromJson(reader, listType);
 				        reader.close();
@@ -363,7 +343,7 @@ public class runtime {
 
 			            fontdata data = new fontdata(fontName, fontSize, fl);
 			            Gson gson = new Gson();
-			            String jsonFilePath = "data.json";
+			            String jsonFilePath = System.getProperty("user.home")+"/data.json";
 
 			            List<fontdata> dataList = new ArrayList<>();
 			            File jsonFile = new File(jsonFilePath);
@@ -618,7 +598,10 @@ public class runtime {
 		    }
 		});
 		recent.addListener(SWT.Selection, event -> {
+		
 			Shell sh12=new Shell(disp);
+			final boolean[] userInteracted = {false}; // flag esterno per sapere se è stato selezionato manualmente
+
 			ArrayList <String> filerecenti=new ArrayList <String>();
 			try {
 				filerecenti=this.fillList();
@@ -626,39 +609,38 @@ public class runtime {
 				sh12.setText(bundle.getString("title.recentFiles"));
 				sh12.setSize(650,500);
 				recelist=new org.eclipse.swt.widgets.List(sh12,SWT.BORDER);
+				recelist.deselectAll();
 				for(String filerecente : filerecenti) {
 					recelist.add(filerecente);
 				}
 				recelist.addSelectionListener(new SelectionListener() {
+				    @Override
+				    public void widgetDefaultSelected(SelectionEvent arg0) {
+				        // Ignora
+				    }
 
-					@Override
-					public void widgetDefaultSelected(SelectionEvent arg0) {
-						// TODO Auto-generated method stub
-						
-					}
+				    @Override
+				    public void widgetSelected(SelectionEvent arg0) {
+				        if (!userInteracted[0]) {
+				            userInteracted[0] = true; // ignora la prima attivazione automatica
+				            return;
+				        }
 
-					@Override
-					public void widgetSelected(SelectionEvent arg0) {
-						 int index = recelist.getSelectionIndex(); // ottieni l'indice
-					        if (index >= 0) {
-					            String selectedItem = recelist.getItem(index); // ottieni il valore testuale
-					            System.out.println(bundle.getString("msg.fileSelected") + selectedItem);
-					            try {
-					            	ProcessBuilder pb = new ProcessBuilder(
-					            		    "java", "-jar", "ProvaEditor2.jar", selectedItem
-					            		);
-
-					                pb.inheritIO(); // eredita l'input/output della console (utile per vedere cosa stampa)
-					                Process process = pb.start();
-
-					            } catch (IOException e) {
-					                e.printStackTrace();
-					            }
-					        }
-						
-					}
-					
-				});
+				        int index = recelist.getSelectionIndex();
+				        if (index >= 0) {
+				            String selectedItem = recelist.getItem(index);
+				            System.out.println(bundle.getString("msg.fileSelected") + selectedItem);
+				            try {
+				                ProcessBuilder pb = new ProcessBuilder(
+				                    "java", "-jar", "ProvaEditor2.jar", selectedItem
+				                );
+				                pb.inheritIO();
+				                pb.start();
+				            } catch (IOException e) {
+				                e.printStackTrace();
+				            }
+				        }
+				    }});
 				sh12.open();
 				while(!sh12.isDisposed()) {
 					disp.readAndDispatch();
@@ -684,48 +666,15 @@ public class runtime {
 		
 
 		if (currentfile.endsWith(".odt")||currentfile.endsWith(".docx")) {
-			if(currentfile.endsWith(".odt")) {
-				System.out.println(bundle.getString("msg.odtFile"));
-				Shell sh7=new Shell(disp);
-				sh7.setText(currentfile + bundle.getString("readonly.readonly"));
-				sh7.setSize(900,600);
-				sh7.setLayout(new FillLayout());
-				Browser browser = new Browser(sh7, SWT.NONE);
-				File htmlFile;
-			htmlFile = new File("ODT.html");
-			browser.setUrl(htmlFile.toURI().toString());
-			Path path = Paths.get(currentfile);
-			byte[] bytes = Files.readAllBytes(path);
-			String base64 = Base64.getEncoder().encodeToString(bytes);
-			new BrowserFunction(browser, "sendTextToJava") {
-			    @Override
-			    public Object function(Object[] arguments) {
-			        if (arguments.length > 0) {
-			            String textFromJS = (String) arguments[0];
-			            System.out.println(bundle.getString("recievedFromJS"));
-			            System.out.println(textFromJS);
-			            editcamp.setText(textFromJS);
-			            sh7.close();
-			            // Qui puoi salvare, analizzare o usare il testo come vuoi
-
-			            // opzionalmente puoi restituire una risposta a JS
-			            return bundle.getString("msg.recievedInJava");
-			        }
-			        return null;
-			    }
-			};
-			browser.addProgressListener(new ProgressAdapter() {
-			    @Override
-			    public void completed(ProgressEvent event) {
-			    	
-			        disp.timerExec(500, () -> { 
-			String safeBase64 = jsEscape(base64);
-			 String script = "window.loadODTFromBase64('" + safeBase64 + "');";
-	            browser.execute(script);});
-			    }});
-			sh7.open();
-			while(sh7.isDisposed()!=true) {
-				disp.readAndDispatch();}}
+			if(currentfile.endsWith(".odt")) {try {
+			    File file = new File(currentfile);
+			    Tika tika = new Tika();
+			    String extractedText = tika.parseToString(file);
+			    editcamp.setText(extractedText);
+			    sh.setText(currentfile);
+			} catch (Exception e) {
+			    e.printStackTrace();
+			}}
 			
 	
 			if(currentfile.endsWith(".docx")) {
@@ -737,6 +686,7 @@ public class runtime {
 	                extractor = new XWPFWordExtractor(doc);
 	                String extractedText = extractor.getText();
 	                editcamp.setText(extractedText);
+	                sh.setText(currentfile);
 				} catch (FileNotFoundException e) {
 					// TODO Auto-generated catch block
 					e.printStackTrace();
@@ -745,6 +695,7 @@ public class runtime {
 					e.printStackTrace();
 				}
             	
+
             	
 		 }}
 		//FINE DOCX O ODT
@@ -754,11 +705,12 @@ public class runtime {
 			sh.setText(currentfile);
 		String content=prov.getcontent();
 		editcamp.setText(content);
+		sh.setText(currentfile);
 		//INIZIO SETTING FONT
-		if(new File("data.json").exists()==true) {
+		if(new File(System.getProperty("user.home")+"/data.json").exists()==true) {
 			try {
 		        Gson gson = new Gson();
-		        FileReader reader = new FileReader("data.json");
+		        FileReader reader = new FileReader(System.getProperty("user.home")+"/data.json");
 		        Type listType = new TypeToken<List<fontdata>>() {}.getType();
 		        List<fontdata> dataList = gson.fromJson(reader, listType);
 		        reader.close();
@@ -798,9 +750,9 @@ public class runtime {
 		            size.select(sizeindex);
 		            editcamp.setFont(nuovoFont);
 		         
-		            System.out.println(bundle.getString("msg.AppliedFont") + matched.font + " " + matched.size);
+		          //  System.out.println(bundle.getString("msg.fontApplied") + matched.font + " " + matched.size);
 		        } else {
-		            System.out.println(bundle.getString("msg.noFontForFile") + currentfile);
+		        //    System.out.println(bundle.getString("msg.fontApplied") + currentfile);
 		            editcamp.setFont(defaultFont);
 		            font.select(1);
 		            size.select(3);
@@ -816,8 +768,9 @@ public class runtime {
 
 	private ArrayList<String> fillList() throws IOException {
 		// TODO Auto-generated method stub
+		if(new File (System.getProperty("user.home")+"/data.json").exists()==true) {
 		   Gson gson = new Gson();
-	        FileReader reader = new FileReader("data.json");
+	        FileReader reader = new FileReader(System.getProperty("user.home")+"/data.json");
 	        Type listType = new TypeToken<List<fontdata>>() {}.getType();
 	        List<fontdata> dataList = gson.fromJson(reader, listType);
 	        reader.close();
@@ -832,7 +785,9 @@ public class runtime {
 	        	int newstart=rece.size()-100;
 	        	 rece = new ArrayList<>(rece.subList(newstart, rece.size()));
 	        }
-		return rece;
+		return rece;}
+		return new ArrayList<String>();
+		
 	}
 
 	private void interfaceinit() {
