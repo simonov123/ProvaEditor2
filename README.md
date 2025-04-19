@@ -1,7 +1,7 @@
-<img src="https://github.com/simonov123/ProvaEditor2/blob/main/Screenshot%20from%202025-04-19%2012-56-59.png?raw=true>
-https://github.com/simonov123/ProvaEditor2/blob/main/Screenshot%20from%202025-04-19%2012-57-30.png?raw=true
-https://github.com/simonov123/ProvaEditor2/blob/main/Screenshot%20from%202025-04-19%2012-58-56.png
-https://github.com/simonov123/ProvaEditor2/blob/main/Screenshot%20from%202025-04-19%2012-59-16.png?raw=true
+<img src="https://github.com/simonov123/ProvaEditor2/blob/main/Screenshot%20from%202025-04-19%2012-56-59.png?raw=true">
+<img src="https://github.com/simonov123/ProvaEditor2/blob/main/Screenshot%20from%202025-04-19%2012-57-30.png?raw=true">
+<img src="https://github.com/simonov123/ProvaEditor2/blob/main/Screenshot%20from%202025-04-19%2012-58-56.png">
+<img src="https://github.com/simonov123/ProvaEditor2/blob/main/Screenshot%20from%202025-04-19%2012-59-16.png?raw=true">
 EN
 
 THIS IS THE IMPROVEMENT OF THE PROVA EDITOR!
