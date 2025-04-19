@@ -1,3 +1,4 @@
+<img src="https://github.com/simonov123/ProvaEditor2/blob/main/iconpe2.png?raw=true">
 <img src="https://github.com/simonov123/ProvaEditor2/blob/main/Screenshot%20from%202025-04-19%2012-56-59.png?raw=true">
 <img src="https://github.com/simonov123/ProvaEditor2/blob/main/Screenshot%20from%202025-04-19%2012-57-30.png?raw=true">
 <img src="https://github.com/simonov123/ProvaEditor2/blob/main/Screenshot%20from%202025-04-19%2012-58-56.png">
