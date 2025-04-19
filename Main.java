@@ -1,0 +1,16 @@
+import java.io.IOException;
+
+public class Main {
+
+	public static void main(String[] args) throws IOException {
+		
+		runtime run=new runtime();
+		if(args.length!=0) {
+		run.run(args[0]);}
+		else {
+			run.run(null);
+		}
+
+	}
+
+}
